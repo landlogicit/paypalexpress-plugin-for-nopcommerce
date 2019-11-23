@@ -9,7 +9,6 @@ using Nop.Plugin.Payments.PayPalExpressCheckout.Models;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Directory;
-using Nop.Services.Discounts;
 using Nop.Services.Orders;
 using Nop.Services.Shipping;
 using Nop.Services.Tax;
@@ -35,8 +34,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Services
             IOrderTotalCalculationService orderTotalCalculationService,
             ITaxService taxService,
             ICurrencyService currencyService,
-            IPriceFormatter priceFormatter
-            )
+            IPriceFormatter priceFormatter)
         {
             _shippingService = shippingService;
             _workContext = workContext;
@@ -58,52 +56,59 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Services
                 //performance optimization. cache returned shipping options.
                 //we'll use them later (after a customer has selected an option).
                 _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer,
-                                                       SystemCustomerAttributeNames.OfferedShippingOptions,
-                                                       getShippingOptionResponse.ShippingOptions,
-                                                       _storeContext.CurrentStore.Id);
+                    NopCustomerDefaults.OfferedShippingOptionsAttribute,
+                    getShippingOptionResponse.ShippingOptions,
+                    _storeContext.CurrentStore.Id);
 
                 foreach (var shippingOption in getShippingOptionResponse.ShippingOptions)
                 {
-                    var soModel = new CheckoutShippingMethodModel.ShippingMethodModel()
-                                      {
-                                          Name = shippingOption.Name,
-                                          Description = shippingOption.Description,
-                                          ShippingRateComputationMethodSystemName = shippingOption.ShippingRateComputationMethodSystemName,
-                                      };
+                    var soModel = new CheckoutShippingMethodModel.ShippingMethodModel
+                    {
+                        Name = shippingOption.Name,
+                        Description = shippingOption.Description,
+                        ShippingRateComputationMethodSystemName =
+                            shippingOption.ShippingRateComputationMethodSystemName
+                    };
 
                     //adjust rate
-                    List<DiscountForCaching> appliedDiscounts = null;
                     var shippingTotal = _orderTotalCalculationService.AdjustShippingRate(
-                        shippingOption.Rate, cart, out appliedDiscounts);
+                        shippingOption.Rate, cart, out _);
 
-                    decimal rateBase = _taxService.GetShippingPrice(shippingTotal, _workContext.CurrentCustomer);
-                    decimal rate = _currencyService.ConvertFromPrimaryStoreCurrency(rateBase, _workContext.WorkingCurrency);
+                    var rateBase = _taxService.GetShippingPrice(shippingTotal, _workContext.CurrentCustomer);
+                    var rate =
+                        _currencyService.ConvertFromPrimaryStoreCurrency(rateBase, _workContext.WorkingCurrency);
                     soModel.Fee = _priceFormatter.FormatShippingPrice(rate, true);
 
                     model.ShippingMethods.Add(soModel);
                 }
 
                 //find a selected (previously) shipping method
-                var selectedShippingOption = _workContext.CurrentCustomer.GetAttribute<ShippingOption>(SystemCustomerAttributeNames.SelectedShippingOption, _storeContext.CurrentStore.Id);
+                var selectedShippingOption = _genericAttributeService.GetAttribute<ShippingOption>(_workContext.CurrentCustomer, NopCustomerDefaults.SelectedShippingOptionAttribute, _storeContext.CurrentStore.Id);
+
+                CheckoutShippingMethodModel.ShippingMethodModel shippingOptionToSelect;
+
                 if (selectedShippingOption != null)
                 {
-                    var shippingOptionToSelect = model.ShippingMethods.ToList()
-                                                      .Find(so => !String.IsNullOrEmpty(so.Name) && so.Name.Equals(selectedShippingOption.Name, StringComparison.InvariantCultureIgnoreCase) &&
-                                                                  !String.IsNullOrEmpty(so.ShippingRateComputationMethodSystemName) && so.ShippingRateComputationMethodSystemName.Equals(selectedShippingOption.ShippingRateComputationMethodSystemName, StringComparison.InvariantCultureIgnoreCase));
+                    shippingOptionToSelect = model.ShippingMethods.ToList()
+                                                      .Find(so => !string.IsNullOrEmpty(so.Name) && so.Name.Equals(selectedShippingOption.Name, StringComparison.InvariantCultureIgnoreCase) &&
+                                                                  !string.IsNullOrEmpty(so.ShippingRateComputationMethodSystemName) && so.ShippingRateComputationMethodSystemName.Equals(selectedShippingOption.ShippingRateComputationMethodSystemName, StringComparison.InvariantCultureIgnoreCase));
                     if (shippingOptionToSelect != null)
                         shippingOptionToSelect.Selected = true;
                 }
+
                 //if no option has been selected, let's do it for the first one
-                if (model.ShippingMethods.FirstOrDefault(so => so.Selected) == null)
-                {
-                    var shippingOptionToSelect = model.ShippingMethods.FirstOrDefault();
-                    if (shippingOptionToSelect != null)
-                        shippingOptionToSelect.Selected = true;
-                }
+                if (model.ShippingMethods.FirstOrDefault(so => so.Selected) != null) 
+                    return model;
+               
+                shippingOptionToSelect = model.ShippingMethods.FirstOrDefault();
+                if (shippingOptionToSelect != null)
+                    shippingOptionToSelect.Selected = true;
             }
             else
+            {
                 foreach (var error in getShippingOptionResponse.Errors)
                     model.Warnings.Add(error);
+            }
 
             return model;
         }
@@ -111,17 +116,17 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Services
         public bool SetShippingMethod(IList<ShoppingCartItem> cart, string shippingoption)
         {
             //parse selected method 
-            if (String.IsNullOrEmpty(shippingoption))
+            if (string.IsNullOrEmpty(shippingoption))
                 return false;
-            var splittedOption = shippingoption.Split(new string[] { "___" }, StringSplitOptions.RemoveEmptyEntries);
+            var splittedOption = shippingoption.Split(new[] { "___" }, StringSplitOptions.RemoveEmptyEntries);
             if (splittedOption.Length != 2)
                 return false;
-            string selectedName = splittedOption[0];
-            string shippingRateComputationMethodSystemName = splittedOption[1];
+            var selectedName = splittedOption[0];
+            var shippingRateComputationMethodSystemName = splittedOption[1];
 
             //find it
             //performance optimization. try cache first
-            var shippingOptions = _workContext.CurrentCustomer.GetAttribute<List<ShippingOption>>(SystemCustomerAttributeNames.OfferedShippingOptions, _storeContext.CurrentStore.Id);
+            var shippingOptions = _genericAttributeService.GetAttribute<List<ShippingOption>>(_workContext.CurrentCustomer, NopCustomerDefaults.OfferedShippingOptionsAttribute, _storeContext.CurrentStore.Id);
             if (shippingOptions == null || shippingOptions.Count == 0)
             {
                 //not found? let's load them using shipping service
@@ -139,20 +144,21 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Services
             }
 
             var shippingOption = shippingOptions
-                .Find(so => !String.IsNullOrEmpty(so.Name) && so.Name.Equals(selectedName, StringComparison.InvariantCultureIgnoreCase));
+                .Find(so => !string.IsNullOrEmpty(so.Name) && so.Name.Equals(selectedName, StringComparison.InvariantCultureIgnoreCase));
             if (shippingOption == null)
                 return false;
 
             //save
-            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer, SystemCustomerAttributeNames.SelectedShippingOption, shippingOption, _storeContext.CurrentStore.Id);
-            
+            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer, 
+                NopCustomerDefaults.SelectedShippingOptionAttribute, shippingOption, _storeContext.CurrentStore.Id);
+
             return true;
         }
 
         public void SetShippingMethodToNull()
         {
             _genericAttributeService.SaveAttribute<ShippingOption>(_workContext.CurrentCustomer,
-                SystemCustomerAttributeNames.SelectedShippingOption, null, _storeContext.CurrentStore.Id);
+                NopCustomerDefaults.SelectedShippingOptionAttribute, null, _storeContext.CurrentStore.Id);
         }
     }
 }

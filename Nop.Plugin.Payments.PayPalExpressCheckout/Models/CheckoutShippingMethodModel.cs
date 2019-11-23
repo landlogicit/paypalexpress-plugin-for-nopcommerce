@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Nop.Web.Framework.Mvc;
+using Nop.Web.Framework.Models;
 
 namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
 {
@@ -25,6 +25,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
             public string Fee { get; set; }
             public bool Selected { get; set; }
         }
+
         #endregion
     }
 }

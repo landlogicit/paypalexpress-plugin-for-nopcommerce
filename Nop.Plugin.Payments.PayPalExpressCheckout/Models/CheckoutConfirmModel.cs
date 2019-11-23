@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Nop.Web.Framework.Mvc;
+using Nop.Web.Framework.Models;
 
 namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
 {
@@ -13,14 +13,5 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
         public string MinOrderTotalWarning { get; set; }
 
         public IList<string> Warnings { get; set; }
-    }
-
-    public class CheckoutPlaceOrderModel : CheckoutConfirmModel
-    {
-        public bool RedirectToCart { get; set; }
-
-        public bool IsRedirected { get; set; }
-
-        public int? CompletedId { get; set; }
     }
 }

@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Web.Script.Serialization;
+using Newtonsoft.Json;
+using Nop.Core;
 using Nop.Core.Domain.Logging;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Infrastructure;
 using Nop.Plugin.Payments.PayPalExpressCheckout.PayPalAPI;
+using Nop.Services.Directory;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
 
@@ -20,7 +22,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
         /// <summary>
         /// Get nopCommerce partner code
         /// </summary>
-        public static string BnCode { get { return "nopCommerce_SP"; } }
+        public static string BnCode => "nopCommerce_SP";
 
         #endregion
 
@@ -36,6 +38,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
                 onFailure(result, response);
 
             LogResponse(response, orderGuid);
+
             return result;
         }
 
@@ -47,6 +50,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
             LogOrderNotesInternal(response, orderGuid, chunks);
             LogDebugMessages(response, chunks);
         }
+
         public static void LogOrderNotes<T>(this T response, Guid orderGuid)
              where T : AbstractResponseType
         {
@@ -59,50 +63,49 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
         {
             var orderService = EngineContext.Current.Resolve<IOrderService>();
             var order = orderService.GetOrderByGuid(orderGuid);
-            for (int index = 0; index < chunks.Count; index++)
+            for (var index = 0; index < chunks.Count; index++)
             {
                 var chunk = chunks[index];
                 var message = new string(chunk.ToArray());
-                var intro = string.Format("{0} returned - Part {1} of {2}", response.GetType().Name, index + 1,
-                                          chunks.Count);
+                var intro = $"{response.GetType().Name} returned - Part {index + 1} of {chunks.Count}";
 
-                if (order != null)
+                if (order == null) 
+                    continue;
+
+                order.OrderNotes.Add(new OrderNote
                 {
-                    order.OrderNotes.Add(new OrderNote
-                    {
-                        Order = order,
-                        DisplayToCustomer = false,
-                        Note = intro + " - " + message,
-                        CreatedOnUtc = DateTime.UtcNow
-                    });
+                    Order = order,
+                    DisplayToCustomer = false,
+                    Note = intro + " - " + message,
+                    CreatedOnUtc = DateTime.UtcNow
+                });
 
-                    orderService.UpdateOrder(order);
-                }
+                orderService.UpdateOrder(order);
             }
         }
+
         private static void LogDebugMessages<T>(T response, List<IEnumerable<char>> chunks) where T : AbstractResponseType
         {
-            for (int index = 0; index < chunks.Count; index++)
+            for (var index = 0; index < chunks.Count; index++)
             {
                 var chunk = chunks[index];
                 var message = new string(chunk.ToArray());
-                var intro = string.Format("{0} returned - Part {1} of {2}", response.GetType().Name, index + 1,
-                                          chunks.Count);
+                var intro = $"{response.GetType().Name} returned - Part {index + 1} of {chunks.Count}";
 
-                if (EngineContext.Current.Resolve<PayPalExpressCheckoutPaymentSettings>().EnableDebugLogging)
-                {
-                    var logger = EngineContext.Current.Resolve<ILogger>();
+                if (!EngineContext.Current.Resolve<PayPalExpressCheckoutPaymentSettings>().EnableDebugLogging) 
+                    continue;
 
-                    logger.InsertLog(LogLevel.Debug, intro, message);
-                }
+                var logger = EngineContext.Current.Resolve<ILogger>();
+
+                logger.InsertLog(LogLevel.Debug, intro, message);
             }
         }
 
         private static List<IEnumerable<char>> GetMessage<T>(T response) where T : AbstractResponseType
         {
-            var javaScriptSerializer = new JavaScriptSerializer();
-            var fullMessage = javaScriptSerializer.Serialize(response);
-            var chunks = fullMessage.Chunk(3500).ToList();
+            var fullMessage = JsonConvert.SerializeObject(response);
+            var chunks = fullMessage.ToList().Chunk(3500).ToList();
+
             return chunks;
         }
 
@@ -128,7 +131,7 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
         /// <summary>
         /// Break a list of items into chunks of a specific size
         /// </summary>
-        public static IEnumerable<IEnumerable<T>> Chunk<T>(this IEnumerable<T> source, int chunksize)
+        public static IEnumerable<IEnumerable<T>> Chunk<T>(this IList<T> source, int chunksize)
         {
             while (source.Any())
             {
@@ -139,11 +142,15 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Helpers
 
         public static BasicAmountType GetBasicAmountType(this decimal value, CurrencyCodeType currency)
         {
+            var currencyService = EngineContext.Current.Resolve<ICurrencyService>();
+            var workContext = EngineContext.Current.Resolve<IWorkContext>();
+            var valueInCustomerCurrency = currencyService.ConvertCurrency(value, workContext.WorkingCurrency.Rate);
+            
             return new BasicAmountType
-                       {
-                           currencyID = currency,
-                           Value = Math.Round(value, 2).ToString("N", new CultureInfo("en-us"))
-                       };
+            {
+                currencyID = currency,
+                Value = Math.Round(valueInCustomerCurrency, 2).ToString("N", new CultureInfo("en-us"))
+            };
         }
 
         #endregion

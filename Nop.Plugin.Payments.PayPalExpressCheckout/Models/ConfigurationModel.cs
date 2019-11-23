@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Plugin.Payments.PayPalExpressCheckout.PayPalAPI;
-using Nop.Web.Framework;
-using Nop.Web.Framework.Mvc;
+using Nop.Web.Framework.Models;
+using Nop.Web.Framework.Mvc.ModelBinding;
 
 namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
 {
@@ -40,12 +40,6 @@ namespace Nop.Plugin.Payments.PayPalExpressCheckout.Models
 
         [NopResourceDisplayName("Plugins.Payments.PayPalExpressCheckout.Fields.PaymentAction")]
         public PaymentActionCodeType PaymentAction { get; set; }
-
-        [NopResourceDisplayName("Plugins.Payments.PayPalExpressCheckout.Fields.AdditionalFee")]
-        public decimal AdditionalFee { get; set; }
-
-        [NopResourceDisplayName("Plugins.Payments.PayPalExpressCheckout.Fields.AdditionalFeePercentage")]
-        public bool AdditionalFeePercentage { get; set; }
 
         [NopResourceDisplayName("Plugins.Payments.PayPalExpressCheckout.Fields.EnableDebugLogging")]
         public bool EnableDebugLogging { get; set; }
